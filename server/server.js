@@ -14,13 +14,55 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
-// Middlewares
+// Middlewares: Support any Netlify deployment (*.netlify.app), Render, and localhost
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+];
+if (process.env.CLIENT_URL) {
+  process.env.CLIENT_URL.split(',').forEach((url) => {
+    const trimmed = url.trim();
+    if (trimmed && !allowedOrigins.includes(trimmed)) {
+      allowedOrigins.push(trimmed);
+    }
+  });
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, health checks)
+      if (!origin) return callback(null, true);
+
+      try {
+        const url = new URL(origin);
+        // Allow ANY Netlify domain (*.netlify.app)
+        if (url.hostname.endsWith('.netlify.app')) {
+          return callback(null, true);
+        }
+        // Allow ANY Render domain (*.onrender.com)
+        if (url.hostname.endsWith('.onrender.com')) {
+          return callback(null, true);
+        }
+        // Allow localhost on any port
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          return callback(null, true);
+        }
+      } catch (e) {
+        // Fallback for non-standard origins
+      }
+
+      // Allow configured origins or any origin dynamically (reflects origin for credentials)
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
+app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
